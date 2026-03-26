@@ -70,6 +70,54 @@ METAFLOW_LOCAL_CONFIG = None
 _all_configs = {}
 
 
+def reset_config():
+    """
+    Reset the cached configuration values to force reinitialization.
+    This clears the global config, local config, and all config values.
+    """
+    global METAFLOW_CONFIG, METAFLOW_LOCAL_CONFIG, _all_configs
+    METAFLOW_CONFIG = None
+    METAFLOW_LOCAL_CONFIG = None
+    _all_configs = {}
+
+
+def init_config(profile=None):
+    """
+    Initialize configuration from $METAFLOW_HOME/config_<profile>.json.
+    
+    Parameters
+    ----------
+    profile : str, optional
+        Profile name to load configuration for. If not provided, uses
+        METAFLOW_PROFILE environment variable.
+    
+    Returns
+    -------
+    dict
+        Configuration dictionary
+    
+    Raises
+    ------
+    MetaflowException
+        If the specified profile configuration file does not exist
+    """
+    home = os.environ.get("METAFLOW_HOME", "~/.metaflowconfig")
+    config_profile = profile or os.environ.get("METAFLOW_PROFILE")
+    path_to_config = os.path.join(home, "config.json")
+    if config_profile:
+        path_to_config = os.path.join(home, "config_%s.json" % config_profile)
+    path_to_config = os.path.expanduser(path_to_config)
+    config = {}
+    if os.path.exists(path_to_config):
+        with open(path_to_config, encoding="utf-8") as f:
+            return json.load(f)
+    elif config_profile:
+        raise MetaflowException(
+            "Unable to locate METAFLOW_PROFILE '%s' in '%s')" % (config_profile, home)
+        )
+    return config
+
+
 def config_values(include=0):
     # By default, we just return non-null values and that
     # are not default. This is the common use case because in all other cases, the code
@@ -79,6 +127,25 @@ def config_values(include=0):
             not config_value.is_default or include & NON_CHANGED_VALUES
         ):
             yield name, config_value.serializer(config_value.value)
+
+
+def set_profile(profile):
+    """
+    Set the METAFLOW_PROFILE environment variable and reset configuration cache.
+    
+    Parameters
+    ----------
+    profile : str
+        Profile name to set as current
+    
+    Returns
+    -------
+    str
+        The profile that was set
+    """
+    os.environ["METAFLOW_PROFILE"] = profile
+    reset_config()
+    return profile
 
 
 def from_conf(name, default=None, validate_fn=None):
@@ -97,6 +164,8 @@ def from_conf(name, default=None, validate_fn=None):
     validate_fn should accept (name, value).
     If the value validates, return None, else raise an MetaflowException.
     """
+    global METAFLOW_CONFIG, METAFLOW_LOCAL_CONFIG
+
     global METAFLOW_CONFIG, METAFLOW_LOCAL_CONFIG
 
     if METAFLOW_CONFIG is None:
