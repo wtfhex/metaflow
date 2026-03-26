@@ -6,6 +6,9 @@ import os
 import time
 import traceback
 
+# Force unbuffered output to ensure logs are immediately visible, especially for multi-line prints
+sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
+
 from types import MethodType, FunctionType
 
 from metaflow.sidecar import Message, MessageTypes
