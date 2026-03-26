@@ -1,0 +1,80 @@
+name: Test R Package
+
+on:
+  pull_request:
+    branches:
+      - master
+      - main
+  push:
+    branches:
+      - master
+      - main
+
+jobs:
+  test-r:
+    name: Test R package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+        r: ['4.3']
+
+    env:
+      R_REMOTES_NO_ERRORS_FROM_WARNINGS: true
+      R_LIBS_USER: ${{ runner.workspace }}/R-library
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup R
+      uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: ${{ matrix.r }}
+        macos-packages: |
+          pkg-config
+          openssl
+          libgit2
+
+    - name: Setup R user library
+      run: |
+        mkdir -p "$R_LIBS_USER"
+        echo "R_LIBS_USER=$R_LIBS_USER" >> $GITHUB_ENV
+      shell: bash
+
+    - name: Install system dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        # Ensure pkg-config is available
+        export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+        brew install pkg-config || true
+      shell: bash
+
+    - name: Query dependencies
+      run: |
+        install.packages("remotes")
+        saveRDS(remotes::dev_package_deps(dependencies = TRUE), "depends.Rds", version = 2)
+      shell: Rscript {0}
+
+    - name: Install dependencies
+      run: |
+        remotes::install_deps(dependencies = TRUE)
+        remotes::install_cran("rcmdcheck")
+      shell: Rscript {0}
+
+    - name: Install package
+      run: |
+        R CMD INSTALL .
+      shell: bash
+
+    - name: Check package
+      run: |
+        rcmdcheck::rcmdcheck(args = c("--no-manual", "--as-cran"), error_on = "error", check_dir = "check")
+      shell: Rscript {0}
+
+    - name: Run tests
+      run: |
+        library(testthat)
+        library(metaflow)
+        test_check("metaflow")
+      shell: Rscript {0}
